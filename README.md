@@ -24,8 +24,9 @@ Run this single command in terminal:
 
 ## 📁 File Structure
 
+- [`detailed.md`](file:///Users/divyanshmishra/Desktop/OS/detailed.md) - 📘 **Exhaustive Technical Documentation, HLD/LLD & Senior Interview Guide**.
 - [`run.command`](file:///Users/divyanshmishra/Desktop/OS/run.command) - 1-Click launcher script for Mac.
-- [`index.html`](file:///Users/divyanshmishra/Desktop/OS/index.html) - Web Visualizer Dashboard.
-- [`style.css`](file:///Users/divyanshmishra/Desktop/OS/style.css) - Minimalist academic design stylesheet.
-- [`app.js`](file:///Users/divyanshmishra/Desktop/OS/app.js) - Client-side interactive engine & trace log generator.
+- [`run.sh`](file:///Users/divyanshmishra/Desktop/OS/run.sh) - Terminal runner script.
 - [`main.cpp`](file:///Users/divyanshmishra/Desktop/OS/main.cpp) - Modular C++ OS simulation core.
+- [`src/`](file:///Users/divyanshmishra/Desktop/OS/src) - React 18 Web UI source code & visualizers.
+
