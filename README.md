@@ -2,6 +2,10 @@
 
 An intuitive, interactive Operating Systems simulation suite featuring both an **Interactive Web Dashboard** and a **C++ Engine**.
 
+[![Deploy with Vercel](https://img.shields.io/badge/Live_Demo-os--learning--suite.vercel.app-00dfa2?style=for-the-badge&logo=vercel&logoColor=white)](https://os-learning-suite.vercel.app)
+
+🌐 **Live Demo:** [https://os-learning-suite.vercel.app](https://os-learning-suite.vercel.app)
+
 ---
 
 ## 🚀 1-Click Launch (Easiest Way!)
