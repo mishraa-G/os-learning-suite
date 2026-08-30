@@ -24,3 +24,7 @@ Thumbs.db
 
 # Vercel
 .vercel
+
+# Local Notes & Interview Prep (Do not commit to public repo)
+detailed.md
+*notes*.md

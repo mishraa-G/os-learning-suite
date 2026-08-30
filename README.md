@@ -24,7 +24,6 @@ Run this single command in terminal:
 
 ## 📁 File Structure
 
-- [`detailed.md`](file:///Users/divyanshmishra/Desktop/OS/detailed.md) - 📘 **Exhaustive Technical Documentation, HLD/LLD & Senior Interview Guide**.
 - [`run.command`](file:///Users/divyanshmishra/Desktop/OS/run.command) - 1-Click launcher script for Mac.
 - [`run.sh`](file:///Users/divyanshmishra/Desktop/OS/run.sh) - Terminal runner script.
 - [`main.cpp`](file:///Users/divyanshmishra/Desktop/OS/main.cpp) - Modular C++ OS simulation core.
