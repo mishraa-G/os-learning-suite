@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { runMemorySimulation } from '../engine/wasmBridge.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -13,75 +14,28 @@ export default function MemoryPaging() {
     setRefString('1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5');
   };
 
-  const simulation = useMemo(() => {
+  // Native C++ WebAssembly Simulation Engine
+  const [simulation, setSimulation] = useState({
+    history: [],
+    faults: 0,
+    hits: 0,
+    total: 0,
+    ratio: '0',
+    logs: [],
+  });
+  const [engineInfo, setEngineInfo] = useState({ name: 'C++17 WebAssembly Core', execTime: null });
+
+  useEffect(() => {
+    let isCancelled = false;
     const pages = refString.split(/[\s,]+/).map(Number).filter((n) => !isNaN(n));
-    if (pages.length === 0) return { history: [], faults: 0, hits: 0, total: 0, ratio: '0', logs: [] };
-
-    let frames = Array(frameCount).fill(-1);
-    let history = [];
-    let logs = [];
-    let pageFaults = 0, pageHits = 0;
-    let inMemory = new Set();
-    let fifoQueue = [];
-    let lastUsed = {};
-
-    pages.forEach((p, time) => {
-      let isHit = inMemory.has(p);
-      if (isHit) {
-        pageHits++;
-        logs.push(`Step ${time + 1}: Requested Page ${p} ➔ PAGE HIT (Already in RAM). Frames: [${frames.join(', ')}]`);
-      } else {
-        pageFaults++;
-        let evictionReason = '';
-        if (inMemory.size < frameCount) {
-          let emptyIdx = frames.indexOf(-1);
-          frames[emptyIdx] = p;
-          evictionReason = `Free frame available. Placed Page ${p}.`;
-        } else {
-          let victim = -1;
-          if (algo === 'FIFO' || algo === 'CLOCK') {
-            victim = fifoQueue.shift();
-            evictionReason = `RAM full. FIFO evicted Page ${victim} (First loaded).`;
-          } else if (algo === 'LRU') {
-            let oldest = 999999;
-            inMemory.forEach((pageInMem) => {
-              if (lastUsed[pageInMem] < oldest) { oldest = lastUsed[pageInMem]; victim = pageInMem; }
-            });
-            evictionReason = `RAM full. LRU evicted Page ${victim} (Least recently used at step ${lastUsed[victim] + 1}).`;
-          } else if (algo === 'OPT') {
-            let farthest = -1;
-            inMemory.forEach((pageInMem) => {
-              let nextUse = 999999;
-              for (let k = time + 1; k < pages.length; k++) {
-                if (pages[k] === pageInMem) { nextUse = k; break; }
-              }
-              if (nextUse > farthest) { farthest = nextUse; victim = pageInMem; }
-            });
-            evictionReason = `RAM full. Optimal evicted Page ${victim} (Farthest reuse in future).`;
-          }
-          inMemory.delete(victim);
-          let replaceIdx = frames.indexOf(victim);
-          frames[replaceIdx] = p;
-        }
-        inMemory.add(p);
-        fifoQueue.push(p);
-        logs.push(`Step ${time + 1}: Requested Page ${p} ➔ PAGE FAULT. ${evictionReason} Frames: [${frames.join(', ')}]`);
+    runMemorySimulation(algo, frameCount, pages).then((resp) => {
+      if (!isCancelled && resp && resp.status === 'ok') {
+        setSimulation(resp.data);
+        setEngineInfo({ name: resp.engine, execTime: resp.data.executionTimeMs });
       }
-      lastUsed[p] = time;
-
-      history.push({ page: p, hit: isHit, framesState: [...frames] });
     });
-
-    const isBeladyTriggered = algo === 'FIFO' && refString === '1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5' && frameCount === 4;
-
-    return {
-      history,
-      faults: pageFaults,
-      hits: pageHits,
-      total: pages.length,
-      ratio: ((pageHits / pages.length) * 100).toFixed(1),
-      logs,
-      isBeladyTriggered,
+    return () => {
+      isCancelled = true;
     };
   }, [algo, frameCount, refString]);
 

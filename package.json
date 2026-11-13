@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:wasm": "bash -c 'source ./emsdk/emsdk_env.sh && em++ -std=c++17 -O3 -s ENVIRONMENT=web,worker -s SINGLE_FILE=1 -s EXPORT_ES6=1 -s MODULARIZE=1 -s EXPORTED_FUNCTIONS=\\'[\"_simulate_os\",\"_malloc\",\"_free\"]\\' -s EXPORTED_RUNTIME_METHODS=\\'[\"ccall\",\"cwrap\",\"UTF8ToString\",\"stringToUTF8\",\"lengthBytesUTF8\"]\\' cpp/engine.cpp -o src/engine/os_engine.js'",
+    "build:native": "g++ -std=c++17 -O3 main.cpp -o scheduler",
     "preview": "vite preview"
   },
   "dependencies": {

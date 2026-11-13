@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { runBankerSimulation } from '../engine/wasmBridge.js';
 import { motion } from 'framer-motion';
 import { ShieldAlert, CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 
@@ -39,48 +40,27 @@ export default function BankersDeadlock() {
     setMaxMat(defaultMax);
   };
 
-  const simulation = useMemo(() => {
-    let need = [];
-    for (let i = 0; i < 5; i++) {
-      let nRow = [];
-      for (let j = 0; j < 3; j++) {
-        nRow.push(Math.max(0, maxMat[i][j] - alloc[i][j]));
+  // Native C++ WebAssembly Simulation Engine
+  const [simulation, setSimulation] = useState({
+    isSafe: false,
+    safeSeq: [],
+    need: [],
+    steps: [],
+    logs: [],
+  });
+  const [engineInfo, setEngineInfo] = useState({ name: 'C++17 WebAssembly Core', execTime: null });
+
+  useEffect(() => {
+    let isCancelled = false;
+    runBankerSimulation(avail, alloc, maxMat).then((resp) => {
+      if (!isCancelled && resp && resp.status === 'ok') {
+        setSimulation(resp.data);
+        setEngineInfo({ name: resp.engine, execTime: resp.data.executionTimeMs });
       }
-      need.push(nRow);
-    }
-
-    let work = [...avail];
-    let finish = Array(5).fill(false);
-    let safeSeq = [];
-    let logs = [];
-    let count = 0;
-
-    logs.push(`Initial Available Work vector = [${work.join(', ')}].`);
-
-    while (count < 5) {
-      let found = false;
-      for (let i = 0; i < 5; i++) {
-        if (!finish[i]) {
-          let canAlloc = true;
-          for (let j = 0; j < 3; j++) {
-            if (need[i][j] > work[j]) { canAlloc = false; break; }
-          }
-          if (canAlloc) {
-            let oldWork = [...work];
-            for (let j = 0; j < 3; j++) work[j] += alloc[i][j];
-            safeSeq.push(i);
-            finish[i] = true;
-            found = true;
-            count++;
-            logs.push(`Step ${count}: Process P${i} evaluated. Need [${need[i].join(', ')}] ≤ Work [${oldWork.join(', ')}]. SATISFIED! P${i} completes. New Work = [${work.join(', ')}].`);
-          }
-        }
-      }
-      if (!found) break;
-    }
-
-    const isSafe = count === 5;
-    return { need, isSafe, safeSeq, count, logs };
+    });
+    return () => {
+      isCancelled = true;
+    };
   }, [avail, alloc, maxMat]);
 
   return (

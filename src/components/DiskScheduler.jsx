@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { runDiskSimulation } from '../engine/wasmBridge.js';
 import { motion } from 'framer-motion';
 import { Disc, Activity } from 'lucide-react';
 
@@ -10,93 +11,27 @@ export default function DiskScheduler() {
 
   const canvasRef = useRef(null);
 
-  const simulation = useMemo(() => {
+  // Native C++ WebAssembly Simulation Engine
+  const [simulation, setSimulation] = useState({
+    seq: [head],
+    totalSeek: 0,
+    avgSeek: '0',
+    logs: [],
+  });
+  const [engineInfo, setEngineInfo] = useState({ name: 'C++17 WebAssembly Core', execTime: null });
+
+  useEffect(() => {
+    let isCancelled = false;
     const requests = queueStr.split(/[\s,]+/).map(Number).filter((n) => !isNaN(n));
-    if (requests.length === 0) return { seq: [head], totalSeek: 0, avgSeek: '0', logs: [] };
-
-    let seq = [head];
-    let logs = [];
-    let totalSeek = 0;
-    let curr = head;
-
-    if (algo === 'FCFS') {
-      requests.forEach((r, idx) => {
-        let dist = Math.abs(r - curr);
-        totalSeek += dist;
-        logs.push(`Step ${idx + 1}: Head moved from Track ${curr} to Track ${r}. Seek = |${r} - ${curr}| = ${dist} tracks.`);
-        curr = r; seq.push(curr);
-      });
-    } else if (algo === 'SSTF') {
-      let reqs = [...requests];
-      let visited = Array(reqs.length).fill(false);
-      for (let i = 0; i < reqs.length; i++) {
-        let idx = -1, minDist = 999999;
-        for (let j = 0; j < reqs.length; j++) {
-          if (!visited[j]) {
-            let d = Math.abs(reqs[j] - curr);
-            if (d < minDist) { minDist = d; idx = j; }
-          }
-        }
-        if (idx !== -1) {
-          visited[idx] = true;
-          totalSeek += minDist;
-          logs.push(`Step ${i + 1}: SSTF selected nearest Track ${reqs[idx]} from ${curr}. Seek = ${minDist} tracks.`);
-          curr = reqs[idx]; seq.push(curr);
-        }
+    runDiskSimulation(algo, head, requests, direction).then((resp) => {
+      if (!isCancelled && resp && resp.status === 'ok') {
+        setSimulation(resp.data);
+        setEngineInfo({ name: resp.engine, execTime: resp.data.executionTimeMs });
       }
-    } else if (algo === 'SCAN' || algo === 'CSCAN') {
-      let left = [], right = [];
-      if (direction === 'high') right.push(199); else left.push(0);
-      requests.forEach((r) => { if (r < head) left.push(r); else right.push(r); });
-      left.sort((a, b) => a - b);
-      right.sort((a, b) => a - b);
-
-      if (algo === 'SCAN') {
-        let run = 2, currentDir = direction;
-        while (run--) {
-          if (currentDir === 'high') {
-            right.forEach((r) => {
-              let dist = Math.abs(r - curr); totalSeek += dist;
-              logs.push(`SCAN (Ascending): Move to Track ${r}. Seek = ${dist} tracks.`);
-              curr = r; seq.push(curr);
-            });
-            currentDir = 'low';
-          } else {
-            for (let i = left.length - 1; i >= 0; i--) {
-              let dist = Math.abs(left[i] - curr); totalSeek += dist;
-              logs.push(`SCAN (Descending): Move to Track ${left[i]}. Seek = ${dist} tracks.`);
-              curr = left[i]; seq.push(curr);
-            }
-            currentDir = 'high';
-          }
-        }
-      } else {
-        right.forEach((r) => {
-          let dist = Math.abs(r - curr); totalSeek += dist;
-          logs.push(`C-SCAN (Ascending): Move to Track ${r}. Seek = ${dist} tracks.`);
-          curr = r; seq.push(curr);
-        });
-        logs.push(`C-SCAN: Reset head to Track 0.`);
-        curr = 0; seq.push(curr);
-        left.forEach((r) => {
-          let dist = Math.abs(r - curr); totalSeek += dist;
-          logs.push(`C-SCAN (Ascending from 0): Move to Track ${r}. Seek = ${dist} tracks.`);
-          curr = r; seq.push(curr);
-        });
-      }
-    } else { // LOOK / C-LOOK
-      let left = requests.filter((r) => r < head).sort((a, b) => a - b);
-      let right = requests.filter((r) => r >= head).sort((a, b) => a - b);
-      if (direction === 'high') {
-        right.forEach((r) => { let d = Math.abs(r - curr); totalSeek += d; logs.push(`LOOK (Ascending): Move to Track ${r}. Seek = ${d}.`); curr = r; seq.push(curr); });
-        for (let i = left.length - 1; i >= 0; i--) { let d = Math.abs(left[i] - curr); totalSeek += d; logs.push(`LOOK (Reverse): Move to Track ${left[i]}. Seek = ${d}.`); curr = left[i]; seq.push(curr); }
-      } else {
-        for (let i = left.length - 1; i >= 0; i--) { let d = Math.abs(left[i] - curr); totalSeek += d; logs.push(`LOOK (Descending): Move to Track ${left[i]}. Seek = ${d}.`); curr = left[i]; seq.push(curr); }
-        right.forEach((r) => { let d = Math.abs(r - curr); totalSeek += d; logs.push(`LOOK (Reverse): Move to Track ${r}. Seek = ${d}.`); curr = r; seq.push(curr); });
-      }
-    }
-
-    return { seq, totalSeek, avgSeek: (totalSeek / requests.length).toFixed(2), logs };
+    });
+    return () => {
+      isCancelled = true;
+    };
   }, [algo, head, queueStr, direction]);
 
   useEffect(() => {

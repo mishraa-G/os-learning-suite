@@ -21,9 +21,15 @@ export default function Navbar({ activeTab, setActiveTab }) {
             <Zap className="w-6 h-6 fill-current" />
           </div>
           <div>
-            <h1 className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-              OS Core Simulator
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                OS Core Simulator
+              </h1>
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                C++17 WASM
+              </span>
+            </div>
             <p className="text-xs text-slate-400 font-medium">Interactive Learning & Animation Suite</p>
           </div>
         </div>

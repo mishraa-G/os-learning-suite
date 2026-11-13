@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, RotateCcw, Plus, Trash2, Zap, Clock, Activity, Server } from 'lucide-react';
+import { Play, RotateCcw, Plus, Trash2, Zap, Clock, Activity, Server, Cpu } from 'lucide-react';
+import { runCpuSimulation } from '../engine/wasmBridge.js';
 
 const pidColors = [
   'bg-blue-600 border-blue-400',
@@ -58,199 +59,41 @@ export default function CpuScheduler() {
     ]);
   };
 
-  // Compute Scheduling Simulation
-  const simulation = useMemo(() => {
-    if (processes.length === 0) return { gantt: [], results: [], metrics: {}, logs: [] };
+  // Native C++ WebAssembly Simulation Engine
+  const [simulation, setSimulation] = useState({
+    gantt: [],
+    results: [],
+    metrics: { avgWt: '0.00', avgTat: '0.00', avgRt: '0.00', cpuUtil: '0.0', contextSwitches: 0, totalTime: 0 },
+    logs: [],
+  });
+  const [engineInfo, setEngineInfo] = useState({ name: 'C++17 WebAssembly Core', execTime: null });
 
-    let procs = JSON.parse(JSON.stringify(processes));
-    procs.forEach((p) => { p.remainingTime = p.burstTime; p.startTime = -1; });
-
-    let gantt = [];
-    let logs = [];
-    let currentTime = 0, cpuBusyTime = 0, contextSwitches = 0, lastPid = -1;
-    let completed = 0, n = procs.length;
-
-    if (algo === 'FCFS') {
-      procs.sort((a, b) => a.arrivalTime - b.arrivalTime || a.pid - b.pid);
-      procs.forEach((p) => {
-        if (currentTime < p.arrivalTime) {
-          logs.push(`t=${currentTime} to ${p.arrivalTime}: CPU is IDLE waiting for process arrival.`);
-          gantt.push({ start: currentTime, end: p.arrivalTime, label: 'IDLE' });
-          currentTime = p.arrivalTime;
-          lastPid = -1;
-        }
-        if (lastPid !== -1 && lastPid !== p.pid) contextSwitches++;
-        p.startTime = currentTime;
-        currentTime += p.burstTime;
-        p.completionTime = currentTime;
-        cpuBusyTime += p.burstTime;
-        gantt.push({ start: p.startTime, end: p.completionTime, label: `P${p.pid}`, pid: p.pid });
-        logs.push(`t=${p.startTime}: Dispatched P${p.pid} (Burst=${p.burstTime}). Completed at t=${p.completionTime}.`);
-        lastPid = p.pid;
-      });
-    } else if (algo === 'SJF') {
-      while (completed < n) {
-        let idx = -1;
-        for (let i = 0; i < n; i++) {
-          if (procs[i].remainingTime > 0 && procs[i].arrivalTime <= currentTime) {
-            if (idx === -1 || procs[i].burstTime < procs[idx].burstTime) idx = i;
-          }
-        }
-        if (idx === -1) {
-          let nextArr = Math.min(...procs.filter((p) => p.remainingTime > 0).map((p) => p.arrivalTime));
-          logs.push(`t=${currentTime}: No process ready. CPU IDLE until t=${nextArr}.`);
-          gantt.push({ start: currentTime, end: nextArr, label: 'IDLE' });
-          currentTime = nextArr;
-          lastPid = -1;
-          continue;
-        }
-        if (lastPid !== -1 && lastPid !== procs[idx].pid) contextSwitches++;
-        procs[idx].startTime = currentTime;
-        currentTime += procs[idx].burstTime;
-        procs[idx].completionTime = currentTime;
-        procs[idx].remainingTime = 0;
-        cpuBusyTime += procs[idx].burstTime;
-        gantt.push({ start: procs[idx].startTime, end: procs[idx].completionTime, label: `P${procs[idx].pid}`, pid: procs[idx].pid });
-        logs.push(`t=${procs[idx].startTime}: Dispatched P${procs[idx].pid} (Shortest burst=${procs[idx].burstTime}). Finishes at t=${procs[idx].completionTime}.`);
-        lastPid = procs[idx].pid;
-        completed++;
-      }
-    } else if (algo === 'SRTF') {
-      while (completed < n) {
-        let idx = -1;
-        for (let i = 0; i < n; i++) {
-          if (procs[i].remainingTime > 0 && procs[i].arrivalTime <= currentTime) {
-            if (idx === -1 || procs[i].remainingTime < procs[idx].remainingTime) idx = i;
-          }
-        }
-        if (idx === -1) {
-          let nextArr = Math.min(...procs.filter((p) => p.remainingTime > 0).map((p) => p.arrivalTime));
-          gantt.push({ start: currentTime, end: nextArr, label: 'IDLE' });
-          currentTime = nextArr;
-          lastPid = -1;
-          continue;
-        }
-        if (lastPid !== -1 && lastPid !== procs[idx].pid) {
-          contextSwitches++;
-          logs.push(`t=${currentTime}: Preempted P${lastPid} ➔ Dispatched P${procs[idx].pid} (Shortest remaining=${procs[idx].remainingTime}).`);
-        }
-        if (procs[idx].startTime === -1) procs[idx].startTime = currentTime;
-
-        gantt.push({ start: currentTime, end: currentTime + 1, label: `P${procs[idx].pid}`, pid: procs[idx].pid });
-        procs[idx].remainingTime--;
-        currentTime++;
-        cpuBusyTime++;
-        lastPid = procs[idx].pid;
-
-        if (procs[idx].remainingTime === 0) {
-          procs[idx].completionTime = currentTime;
-          completed++;
-          logs.push(`t=${currentTime}: P${procs[idx].pid} completed execution.`);
-        }
-      }
-    } else if (algo === 'RR' || algo === 'MLFQ') {
-      procs.sort((a, b) => a.arrivalTime - b.arrivalTime);
-      let queue = [];
-      let nextIdx = 0;
-      let qVal = algo === 'MLFQ' ? 2 : quantum;
-      while (completed < n) {
-        if (queue.length === 0) {
-          if (nextIdx < n && currentTime < procs[nextIdx].arrivalTime) {
-            gantt.push({ start: currentTime, end: procs[nextIdx].arrivalTime, label: 'IDLE' });
-            currentTime = procs[nextIdx].arrivalTime;
-            lastPid = -1;
-          }
-          while (nextIdx < n && procs[nextIdx].arrivalTime <= currentTime) queue.push(nextIdx++);
-        }
-        if (queue.length === 0) continue;
-        let idx = queue.shift();
-        if (lastPid !== -1 && lastPid !== procs[idx].pid) contextSwitches++;
-        if (procs[idx].startTime === -1) procs[idx].startTime = currentTime;
-
-        let runTime = Math.min(qVal, procs[idx].remainingTime);
-        gantt.push({ start: currentTime, end: currentTime + runTime, label: `P${procs[idx].pid}`, pid: procs[idx].pid });
-        logs.push(`t=${currentTime}: Allocated time slice (q=${runTime}) to P${procs[idx].pid}.`);
-
-        currentTime += runTime;
-        cpuBusyTime += runTime;
-        procs[idx].remainingTime -= runTime;
-
-        while (nextIdx < n && procs[nextIdx].arrivalTime <= currentTime) queue.push(nextIdx++);
-        if (procs[idx].remainingTime > 0) queue.push(idx);
-        else { procs[idx].completionTime = currentTime; completed++; logs.push(`t=${currentTime}: P${procs[idx].pid} completed.`); }
-        lastPid = procs[idx].pid;
-      }
-    } else if (algo === 'Priority') {
-      while (completed < n) {
-        let idx = -1, bestPrio = 99999;
-        for (let i = 0; i < n; i++) {
-          if (procs[i].remainingTime > 0 && procs[i].arrivalTime <= currentTime) {
-            let wait = currentTime - procs[i].arrivalTime;
-            let effPrio = Math.max(0, procs[i].priority - Math.floor(wait / aging));
-            if (idx === -1 || effPrio < bestPrio) { idx = i; bestPrio = effPrio; }
-          }
-        }
-        if (idx === -1) {
-          let nextArr = Math.min(...procs.filter((p) => p.remainingTime > 0).map((p) => p.arrivalTime));
-          gantt.push({ start: currentTime, end: nextArr, label: 'IDLE' });
-          currentTime = nextArr;
-          lastPid = -1;
-          continue;
-        }
-        if (lastPid !== -1 && lastPid !== procs[idx].pid) contextSwitches++;
-        procs[idx].startTime = currentTime;
-        currentTime += procs[idx].burstTime;
-        procs[idx].completionTime = currentTime;
-        procs[idx].remainingTime = 0;
-        cpuBusyTime += procs[idx].burstTime;
-        gantt.push({ start: procs[idx].startTime, end: procs[idx].completionTime, label: `P${procs[idx].pid}`, pid: procs[idx].pid });
-        logs.push(`t=${procs[idx].startTime}: Executed P${procs[idx].pid} (Effective Priority=${bestPrio}). Completed at t=${procs[idx].completionTime}.`);
-        lastPid = procs[idx].pid;
-        completed++;
-      }
-    }
-
-    // Merge consecutive blocks
-    let mergedGantt = [];
-    gantt.forEach((g) => {
-      if (g.start === g.end) return;
-      if (mergedGantt.length > 0 && mergedGantt[mergedGantt.length - 1].label === g.label && mergedGantt[mergedGantt.length - 1].end === g.start) {
-        mergedGantt[mergedGantt.length - 1].end = g.end;
-      } else {
-        mergedGantt.push(g);
+  useEffect(() => {
+    let isCancelled = false;
+    runCpuSimulation(algo, processes, quantum, aging).then((resp) => {
+      if (!isCancelled && resp && resp.status === 'ok') {
+        setSimulation(resp.data);
+        setEngineInfo({ name: resp.engine, execTime: resp.data.executionTimeMs });
       }
     });
-
-    // Calculate metrics
-    let totWt = 0, totTat = 0, totRt = 0;
-    procs.forEach((p) => {
-      p.turnaroundTime = p.completionTime - p.arrivalTime;
-      p.waitingTime = p.turnaroundTime - p.burstTime;
-      p.responseTime = p.startTime - p.arrivalTime;
-      totWt += p.waitingTime;
-      totTat += p.turnaroundTime;
-      totRt += p.responseTime;
-    });
-
-    const metrics = {
-      avgWt: (totWt / n).toFixed(2),
-      avgTat: (totTat / n).toFixed(2),
-      avgRt: (totRt / n).toFixed(2),
-      cpuUtil: ((cpuBusyTime / (currentTime || 1)) * 100).toFixed(1),
-      contextSwitches,
-      totalTime: currentTime,
+    return () => {
+      isCancelled = true;
     };
-
-    return { gantt: mergedGantt, results: procs, metrics, logs };
   }, [processes, algo, quantum, aging]);
 
   return (
     <div className="space-y-6">
       {/* Student Concept Banner */}
       <div className="bg-gradient-to-r from-blue-900/40 via-indigo-900/30 to-slate-900/60 border border-blue-500/30 rounded-xl p-5 shadow-lg">
-        <h2 className="text-xl font-extrabold text-blue-400 flex items-center gap-2 mb-1">
-          <Server className="w-5 h-5" /> 🖥️ CPU Process Scheduling
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h2 className="text-xl font-extrabold text-blue-400 flex items-center gap-2">
+            <Server className="w-5 h-5" /> 🖥️ CPU Process Scheduling
+          </h2>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 flex items-center gap-1.5 font-mono shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            ⚡ {engineInfo.name} {engineInfo.execTime ? `(${engineInfo.execTime.toFixed(2)}ms)` : ''}
+          </span>
+        </div>
         <p className="text-sm text-slate-300 mb-3">
           The CPU scheduler decides which process gets execution time. Explore preemption, time slices, and queue priorities!
         </p>
