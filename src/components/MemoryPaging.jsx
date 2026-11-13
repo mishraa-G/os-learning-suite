@@ -135,40 +135,44 @@ export default function MemoryPaging() {
             {/* RAM Frame Matrix */}
             <div className="flex gap-2 overflow-x-auto custom-scrollbar p-3 bg-dark-900 rounded-lg border border-slate-800">
               <AnimatePresence>
-                {simulation.history.map((step, idx) => (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: idx * 0.03 }}
-                    className="flex flex-col items-center gap-1 font-mono text-xs"
-                  >
-                    <span className="font-bold px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-200">
-                      P{step.page}
-                    </span>
-                    {step.framesState.map((val, fIdx) => (
-                      <div
-                        key={fIdx}
-                        className={`w-9 h-8 border rounded flex items-center justify-center font-bold ${
-                          val === step.page
-                            ? step.hit
-                              ? 'bg-emerald-950/80 border-emerald-500 text-emerald-400'
-                              : 'bg-rose-950/80 border-rose-500 text-rose-400'
-                            : 'bg-slate-900 border-slate-800 text-slate-400'
+                {(simulation.history || []).map((step, idx) => {
+                  const isHit = step.hit !== undefined ? step.hit : step.isHit;
+                  const framesList = step.framesState || step.frames || [];
+                  return (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: idx * 0.03 }}
+                      className="flex flex-col items-center gap-1 font-mono text-xs"
+                    >
+                      <span className="font-bold px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-200">
+                        P{step.page}
+                      </span>
+                      {framesList.map((val, fIdx) => (
+                        <div
+                          key={fIdx}
+                          className={`w-9 h-8 border rounded flex items-center justify-center font-bold ${
+                            val === step.page
+                              ? isHit
+                                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-400'
+                                : 'bg-rose-950/80 border-rose-500 text-rose-400'
+                              : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {val === -1 ? '-' : val}
+                        </div>
+                      ))}
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          isHit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
                         }`}
                       >
-                        {val === -1 ? '-' : val}
-                      </div>
-                    ))}
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        step.hit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                      }`}
-                    >
-                      {step.hit ? 'HIT' : 'FAULT'}
-                    </span>
-                  </motion.div>
-                ))}
+                        {isHit ? 'HIT' : 'FAULT'}
+                      </span>
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
             </div>
 

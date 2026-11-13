@@ -415,11 +415,16 @@ json simulate(const string& algo, int frameCount, const vector<int>& pages) {
             {"step", time + 1},
             {"page", p},
             {"frames", frames},
+            {"framesState", frames},
+            {"hit", isHit},
             {"isHit", isHit},
             {"victim", victim},
             {"reason", reason}
         });
     }
+
+    vector<int> beladyRef = {1, 2, 3, 4, 1, 2, 5, 1, 2, 3, 4, 5};
+    bool isBeladyTriggered = (algo == "FIFO" && frameCount == 4 && pages == beladyRef);
 
     auto t1 = chrono::high_resolution_clock::now();
     double execTimeMs = chrono::duration<double, milli>(t1 - t0).count();
@@ -434,6 +439,7 @@ json simulate(const string& algo, int frameCount, const vector<int>& pages) {
         {"total", n},
         {"ratio", ssRatio.str()},
         {"logs", logs},
+        {"isBeladyTriggered", isBeladyTriggered},
         {"executionTimeMs", execTimeMs}
     };
 }
@@ -523,6 +529,7 @@ json simulate(const vector<int>& avail, const vector<vector<int>>& alloc, const 
         {"isSafe", isSafe},
         {"safeSeq", safeSeq},
         {"need", need},
+        {"count", count},
         {"steps", steps},
         {"logs", logs},
         {"executionTimeMs", execTimeMs}
